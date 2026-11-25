@@ -94,20 +94,26 @@ async function seedDatabase({ reset = false } = {}) {
     await Promise.all([User.deleteMany({}), Property.deleteMany({}), Inquiry.deleteMany({})]);
   }
 
-  const email = (process.env.ADMIN_EMAIL || 'admin@propertyportal.com').toLowerCase();
-  let admin = await User.findOne({ email });
-  if (!admin) {
-    admin = await User.create({
-      name: process.env.ADMIN_NAME || 'Agency Admin',
-      email,
-      password: process.env.ADMIN_PASSWORD || 'admin123',
-      role: 'admin',
-    });
+  // In production without ADMIN_PASSWORD no default admin is created: the first
+  // visit to /admin/login shows a one-time "create broker account" form instead.
+  const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+  let admin = null;
+  if (process.env.ADMIN_PASSWORD || !isProduction) {
+    const email = (process.env.ADMIN_EMAIL || 'admin@propertyportal.com').toLowerCase();
+    admin = await User.findOne({ email });
+    if (!admin) {
+      admin = await User.create({
+        name: process.env.ADMIN_NAME || 'Agency Admin',
+        email,
+        password: process.env.ADMIN_PASSWORD || 'admin123',
+        role: 'admin',
+      });
+    }
   }
 
   if ((await Property.countDocuments()) > 0) return { admin, created: 0 };
 
-  const created = await Property.insertMany(properties.map((p) => ({ ...p, createdBy: admin._id })));
+  const created = await Property.insertMany(properties.map((p) => ({ ...p, createdBy: admin?._id })));
 
   await Inquiry.insertMany([
     {

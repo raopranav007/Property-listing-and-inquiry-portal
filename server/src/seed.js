@@ -11,7 +11,7 @@ const { seedDatabase } = require('./utils/seedData');
     }
     await connectDB();
     const { admin, created } = await seedDatabase({ reset: true });
-    console.log(`🌱 Seeded ${created} properties. Admin login: ${admin.email}`);
+    console.log(`🌱 Seeded ${created} properties. Admin login: ${admin ? admin.email : "none (create at /admin/login)"}`);
   } catch (err) {
     console.error(err);
     process.exitCode = 1;

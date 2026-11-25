@@ -75,7 +75,7 @@ npm run dev
 - Frontend: http://localhost:5173
 - API: http://localhost:5000/api
 
-The admin account is created automatically on first start:
+In development the admin account is created automatically on first start:
 
 | Email | Password |
 |---|---|
@@ -105,15 +105,16 @@ The repo is ready for Vercel: `vercel.json` builds the React app into static fil
 
 1. **Create a free MongoDB Atlas database** at https://www.mongodb.com/cloud/atlas. Create a database user, and under *Network Access* allow `0.0.0.0/0` (Vercel has no fixed IP). Copy the connection string, for example `mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/property_portal`.
 2. **Import the GitHub repo** at https://vercel.com/new. Keep the root directory as `/`; the build settings come from `vercel.json`.
-3. **Add environment variables** in *Project → Settings → Environment Variables*:
+3. **Environment variables** in *Project → Settings → Environment Variables*:
 
-   | Name | Value |
-   |---|---|
-   | `MONGODB_URI` | your Atlas connection string |
-   | `JWT_SECRET` | a long random string |
-   | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | the broker login to create on first start |
+   | Name | Required | Value |
+   |---|---|---|
+   | `MONGODB_URI` | yes | your Atlas connection string (set automatically if you add MongoDB Atlas from the project's *Storage* tab) |
+   | `JWT_SECRET` | no | a long random string; if omitted, one is derived from `MONGODB_URI` |
+   | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | creates the broker login on first start; if omitted, see step 5 |
 
-4. **Deploy.** On the first request the API creates the admin account and the sample listings in the empty database. Every push to `main` redeploys automatically.
+4. **Deploy.** On the first request the API creates the sample listings in the empty database. Every push to `main` redeploys automatically.
+5. **Create the broker account.** If `ADMIN_PASSWORD` was not set, open `/admin/login` on the live site right after the first deploy: it shows a one-time *Create the broker account* form. Once an account exists the form is gone for good, so do this straight away.
 
 Or deploy from the terminal with the CLI: `npx vercel login`, then `npx vercel --prod`.
 
