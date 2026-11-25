@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api, { errorMessage } from '../../api'
 import Loader from '../../components/Loader'
 
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024
+
 const EMPTY = {
   title: '', description: '', price: '', listingType: 'Sale', propertyType: 'Apartment', availability: 'Available',
   location: { address: '', locality: '', city: '', pincode: '' },
@@ -43,7 +45,10 @@ export default function PropertyForm() {
   const updateLoc = (e) => setForm({ ...form, location: { ...form.location, [e.target.name]: e.target.value } })
 
   const addFiles = (e) => {
-    setFiles([...files, ...Array.from(e.target.files)].slice(0, 8))
+    const picked = Array.from(e.target.files)
+    const tooBig = picked.filter((f) => f.size > MAX_IMAGE_BYTES)
+    setError(tooBig.length ? `Skipped ${tooBig.map((f) => f.name).join(', ')} – each photo must be under 4 MB` : '')
+    setFiles([...files, ...picked.filter((f) => f.size <= MAX_IMAGE_BYTES)].slice(0, 8))
     e.target.value = ''
   }
   const addImageUrl = () => {
@@ -64,13 +69,19 @@ export default function PropertyForm() {
       areaSqft: Number(form.areaSqft) || 0,
       amenities: form.amenities.split(',').map((a) => a.trim()).filter(Boolean),
     }
-    const body = new FormData()
-    body.append('data', JSON.stringify(payload))
-    files.forEach((f) => body.append('images', f))
-
     try {
-      if (editing) await api.put(`/properties/${id}`, body)
-      else await api.post('/properties', body)
+      // Upload new photos one by one (stored in MongoDB), then save the listing with their URLs
+      const uploaded = []
+      for (const file of files) {
+        const body = new FormData()
+        body.append('image', file)
+        const { data } = await api.post('/images', body)
+        uploaded.push(data.url)
+      }
+      payload.images = [...form.images, ...uploaded]
+
+      if (editing) await api.put(`/properties/${id}`, payload)
+      else await api.post('/properties', payload)
       navigate('/admin/listings')
     } catch (err) {
       setError(errorMessage(err))
@@ -158,7 +169,7 @@ export default function PropertyForm() {
             </div>
           ))}
         </div>
-        <label>Upload photos (JPG, PNG, WEBP – max 5 MB each)<input type="file" accept="image/*" multiple onChange={addFiles} /></label>
+        <label>Upload photos (JPG, PNG, WEBP – max 4 MB each)<input type="file" accept="image/*" multiple onChange={addFiles} /></label>
         <div className="row-url">
           <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="…or paste an image URL" aria-label="Image URL" />
           <button type="button" className="btn btn-outline" onClick={addImageUrl}>Add URL</button>

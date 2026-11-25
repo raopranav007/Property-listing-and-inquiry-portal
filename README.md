@@ -19,7 +19,7 @@ A centralised web platform where a local broker or agency manages property listi
 | Layer | Technology |
 |---|---|
 | Frontend | **React.js** (Vite), **HTML**, **CSS** (hand-written, responsive), **JavaScript**, React Router, Axios |
-| Backend | **Node.js**, **Express.js** REST APIs, JWT authentication, bcrypt password hashing, Multer image uploads, express-validator |
+| Backend | **Node.js**, **Express.js** REST APIs, JWT authentication, bcrypt password hashing, Multer image uploads (stored in MongoDB), express-validator |
 | Database | **MongoDB** with Mongoose (collections: `properties`, `inquiries`, `users`) |
 | Version control | Git and GitHub |
 
@@ -99,26 +99,48 @@ Express serves the built React app from `client/dist` together with the API on o
 
 ---
 
+## Deploying to Vercel
+
+The repo is ready for Vercel: `vercel.json` builds the React app into static files and runs the Express API as a serverless function (`api/index.js`). Uploaded photos are stored in MongoDB, because Vercel has no permanent disk.
+
+1. **Create a free MongoDB Atlas database** at https://www.mongodb.com/cloud/atlas. Create a database user, and under *Network Access* allow `0.0.0.0/0` (Vercel has no fixed IP). Copy the connection string, for example `mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/property_portal`.
+2. **Import the GitHub repo** at https://vercel.com/new. Keep the root directory as `/`; the build settings come from `vercel.json`.
+3. **Add environment variables** in *Project → Settings → Environment Variables*:
+
+   | Name | Value |
+   |---|---|
+   | `MONGODB_URI` | your Atlas connection string |
+   | `JWT_SECRET` | a long random string |
+   | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | the broker login to create on first start |
+
+4. **Deploy.** On the first request the API creates the admin account and the sample listings in the empty database. Every push to `main` redeploys automatically.
+
+Or deploy from the terminal with the CLI: `npx vercel login`, then `npx vercel --prod`.
+
+---
+
 ## Project structure
 
 ```
 property-portal/
 ├── package.json              # root scripts (runs client + server together)
+├── vercel.json               # Vercel build + routing config
+├── api/index.js              # Vercel serverless entry (wraps the Express app)
 ├── server/                   # Node.js + Express.js + MongoDB
 │   ├── .env.example
-│   ├── public/samples/       # bundled sample property images
-│   ├── uploads/              # images uploaded by the broker
 │   └── src/
-│       ├── index.js          # starts DB + server
+│       ├── index.js          # starts the local server
+│       ├── bootstrap.js      # connects DB + creates admin/sample data (shared with Vercel)
 │       ├── app.js            # Express app, routes, error handling
 │       ├── seed.js           # npm run seed
 │       ├── config/db.js      # MongoDB connection (real or in-memory)
-│       ├── models/           # Property, Inquiry, User (Mongoose schemas)
-│       ├── routes/           # auth.js, properties.js, inquiries.js
+│       ├── models/           # Property, Inquiry, User, Image (Mongoose schemas)
+│       ├── routes/           # auth.js, properties.js, inquiries.js, images.js
 │       ├── middleware/       # auth (JWT), upload (Multer), validate
 │       └── utils/seedData.js # sample listings, inquiries and admin user
 └── client/                   # React.js (Vite)
     ├── index.html
+    ├── public/samples/       # bundled sample property images
     └── src/
         ├── main.jsx, App.jsx # router setup
         ├── api.js            # Axios instance (adds JWT)
@@ -136,6 +158,8 @@ property-portal/
 
 **Inquiry** – `property → Property`, `name`, `email`, `phone`, `message`, `preferredContact` (Phone/Email/WhatsApp), `status` (New/Contacted/Site Visit Scheduled/Closed), `notes[] {text, author, createdAt}`, timestamps
 
+**Image** – `data` (binary), `contentType`, `size`, `uploadedBy → User`, timestamps
+
 **User** – `name`, `email` (unique), `password` (bcrypt hash), `role` (admin/broker), timestamps
 
 ## REST API
@@ -147,10 +171,12 @@ property-portal/
 | GET | `/api/properties` | Public | Search/filter: `q, city, locality, listingType, propertyType, availability, minPrice, maxPrice, bedrooms, featured, sort, page, limit` |
 | GET | `/api/properties/meta` | Public | Cities, types and price range for filters |
 | GET | `/api/properties/:id` | Public | Property details + similar listings |
-| POST | `/api/properties` | Admin | Add listing (multipart: `data` JSON + `images` files) |
+| POST | `/api/images` | Admin | Upload one photo (multipart field `image`, max 4 MB), returns its URL |
+| GET | `/api/images/:id` | Public | Serve an uploaded photo |
+| POST | `/api/properties` | Admin | Add listing (JSON; `images` is a list of URLs) |
 | PUT | `/api/properties/:id` | Admin | Update listing |
 | PATCH | `/api/properties/:id/availability` | Admin | Change availability |
-| DELETE | `/api/properties/:id` | Admin | Remove listing and its inquiries |
+| DELETE | `/api/properties/:id` | Admin | Remove listing, its inquiries and its uploaded photos |
 | POST | `/api/inquiries` | Public | Submit an inquiry |
 | GET | `/api/inquiries` | Admin | List inquiries (`status`, `property`, `q`) |
 | GET | `/api/inquiries/stats` | Admin | Dashboard counts |

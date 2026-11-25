@@ -12,16 +12,18 @@ async function connectDB() {
   let uri = process.env.MONGODB_URI;
 
   if (!uri) {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
       throw new Error('MONGODB_URI must be set in production');
     }
-    const { MongoMemoryServer } = require('mongodb-memory-server');
+    // Dev-only dependency; the variable keeps serverless bundlers from packaging it
+    const devPkg = 'mongodb-memory-server';
+    const { MongoMemoryServer } = require(devPkg);
     memoryServer = await MongoMemoryServer.create();
     uri = memoryServer.getUri('property_portal');
     console.log('⚠️  MONGODB_URI not set – using an in-memory MongoDB (data is not persisted).');
   }
 
-  await mongoose.connect(uri);
+  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
   console.log(`✅ MongoDB connected: ${mongoose.connection.host}/${mongoose.connection.name}`);
   return { inMemory: Boolean(memoryServer) };
 }

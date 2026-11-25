@@ -1,11 +1,9 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const mongoose = require('mongoose');
 const Property = require('../models/Property');
 const Inquiry = require('../models/Inquiry');
 const { protect } = require('../middleware/auth');
-const { upload, UPLOAD_DIR } = require('../middleware/upload');
+const { deleteStoredImages } = require('./images');
 
 const router = express.Router();
 
@@ -100,42 +98,22 @@ router.get('/:id', async (req, res, next) => {
 
 /* ---------- Admin (protected) ---------- */
 
-/** Multipart requests send listing fields as JSON in a "data" field plus "images" files. */
-function readPayload(req) {
-  let data = req.body;
-  if (typeof req.body.data === 'string') {
-    try {
-      data = JSON.parse(req.body.data);
-    } catch {
-      const err = new Error('Invalid listing data');
-      err.status = 400;
-      throw err;
-    }
-  }
-  const uploaded = (req.files || []).map((f) => `/uploads/${f.filename}`);
-  const kept = Array.isArray(data.images) ? data.images.filter(Boolean) : [];
+/** Picks the editable fields from the JSON body. Images are URLs (uploaded via /api/images first). */
+function readPayload(body) {
   const allowed = [
     'title', 'description', 'price', 'listingType', 'propertyType', 'availability', 'location',
     'bedrooms', 'bathrooms', 'areaSqft', 'furnishing', 'amenities', 'featured',
   ];
   const payload = {};
-  for (const key of allowed) if (data[key] !== undefined) payload[key] = data[key];
-  payload.images = [...kept, ...uploaded];
+  for (const key of allowed) if (body[key] !== undefined) payload[key] = body[key];
+  payload.images = Array.isArray(body.images) ? body.images.filter((i) => typeof i === 'string' && i) : [];
   return payload;
 }
 
-function removeLocalImages(urls) {
-  for (const url of urls) {
-    if (!url.startsWith('/uploads/')) continue;
-    const file = path.join(UPLOAD_DIR, path.basename(url));
-    fs.promises.unlink(file).catch(() => {});
-  }
-}
-
 // POST /api/properties  – add a listing
-router.post('/', protect, upload.array('images', 8), async (req, res, next) => {
+router.post('/', protect, async (req, res, next) => {
   try {
-    const payload = readPayload(req);
+    const payload = readPayload(req.body);
     const property = await Property.create({ ...payload, createdBy: req.user._id });
     res.status(201).json(property);
   } catch (err) {
@@ -144,16 +122,16 @@ router.post('/', protect, upload.array('images', 8), async (req, res, next) => {
 });
 
 // PUT /api/properties/:id  – update a listing
-router.put('/:id', protect, upload.array('images', 8), async (req, res, next) => {
+router.put('/:id', protect, async (req, res, next) => {
   try {
     const property = await Property.findById(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
-    const payload = readPayload(req);
+    const payload = readPayload(req.body);
     const removed = property.images.filter((img) => !payload.images.includes(img));
     property.set(payload);
     await property.save();
-    removeLocalImages(removed);
+    await deleteStoredImages(removed);
     res.json(property);
   } catch (err) {
     next(err);
@@ -181,7 +159,7 @@ router.delete('/:id', protect, async (req, res, next) => {
     const property = await Property.findByIdAndDelete(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property not found' });
     await Inquiry.deleteMany({ property: property._id });
-    removeLocalImages(property.images);
+    await deleteStoredImages(property.images);
     res.json({ message: 'Listing removed' });
   } catch (err) {
     next(err);
