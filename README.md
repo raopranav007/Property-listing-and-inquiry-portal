@@ -169,6 +169,8 @@ property-portal/
 |---|---|---|---|
 | POST | `/api/auth/login` | Public | Log in, returns JWT |
 | GET | `/api/auth/me` | Admin | Current user |
+| DELETE | `/api/auth/me` | Admin | Delete your own account (if it was the last one, first-run setup reopens) |
+| GET / POST | `/api/auth/setup` | Public | Check / create the first admin account (only while none exists) |
 | GET | `/api/properties` | Public | Search/filter: `q, city, locality, listingType, propertyType, availability, minPrice, maxPrice, bedrooms, featured, sort, page, limit` |
 | GET | `/api/properties/meta` | Public | Cities, types and price range for filters |
 | GET | `/api/properties/:id` | Public | Property details + similar listings |

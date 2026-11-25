@@ -80,4 +80,15 @@ router.post(
 // GET /api/auth/me  – current logged-in user
 router.get('/me', protect, (req, res) => res.json({ user: publicUser(req.user) }));
 
+// DELETE /api/auth/me  – an admin deletes their own account. If it was the only
+// account, the one-time setup form on /admin/login becomes available again.
+router.delete('/me', protect, async (req, res, next) => {
+  try {
+    await req.user.deleteOne();
+    res.json({ message: 'Account deleted' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
